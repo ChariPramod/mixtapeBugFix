@@ -5,9 +5,10 @@ Handles creating and retrieving notifications.
 Notifications are generated when friends interact with a user's shared songs.
 """
 
+from datetime import datetime, timezone
 from app import db
-from models import Notification, Song, User, Rating
-from sqlalchemy import desc
+from models import Notification, Song, User, Rating, playlist_entries
+from sqlalchemy import desc, func
 
 
 def create_notification(user_id: str, notification_type: str, body: str) -> Notification:
@@ -58,7 +59,20 @@ def add_to_playlist(playlist_id: str, song_id: str, added_by_user_id: str) -> No
 
     # Add the song to the playlist
     if song not in playlist.songs:
-        playlist.songs.append(song)
+        next_position = (
+            db.session.query(func.max(playlist_entries.c.position))
+            .filter(playlist_entries.c.playlist_id == playlist_id)
+            .scalar() or 0
+        ) + 1
+        db.session.execute(
+            playlist_entries.insert().values(
+                playlist_id=playlist_id,
+                song_id=song_id,
+                position=next_position,
+                added_by=added_by_user_id,
+                added_at=datetime.now(timezone.utc),
+            )
+        )
         db.session.commit()
 
     # Notify the person who originally shared the song (if it wasn't them who added it)
